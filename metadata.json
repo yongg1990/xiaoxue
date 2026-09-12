@@ -1,0 +1,6 @@
+{
+  "name": "人教版小学英语单词探险 (PEP 2024新课标)",
+  "description": "专为小学打造的人教版（PEP）英语与各学科学习应用，支持无门槛课后作业答题、分年级第一单元满分100分试卷（语文、数学、英语共100题加2道思维拓展题）、2024全新版课文句子研读与单词卡片互动。",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

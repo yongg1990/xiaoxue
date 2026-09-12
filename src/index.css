@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Quicksand', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    background-color: #f8f9ff;
+    color: #0d1c2f;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+.font-quicksand {
+  font-family: 'Quicksand', sans-serif;
+}
+
+/* 3D and Cloud Shadows */
+.cloud-shadow {
+  box-shadow: 0px 8px 24px rgba(0, 103, 128, 0.08), 0px 2px 8px rgba(124, 88, 0, 0.04);
+}
+
+.cloud-shadow-lg {
+  box-shadow: 0px 16px 36px rgba(0, 103, 128, 0.12), 0px 4px 12px rgba(124, 88, 0, 0.06);
+}
+
+.button-3d-yellow {
+  box-shadow: 0 4px 0 #d19700;
+  transition: all 0.15s ease-out;
+}
+.button-3d-yellow:hover {
+  filter: brightness(1.03);
+}
+.button-3d-yellow:active {
+  box-shadow: 0 0 0 #d19700;
+  transform: translateY(4px);
+}
+
+.button-3d-green {
+  box-shadow: 0 4px 0 #54a800;
+  transition: all 0.15s ease-out;
+}
+.button-3d-green:hover {
+  filter: brightness(1.03);
+}
+.button-3d-green:active {
+  box-shadow: 0 0 0 #54a800;
+  transform: translateY(4px);
+}
+
+.button-3d-blue {
+  box-shadow: 0 4px 0 #008eb0;
+  transition: all 0.15s ease-out;
+}
+.button-3d-blue:hover {
+  filter: brightness(1.03);
+}
+.button-3d-blue:active {
+  box-shadow: 0 0 0 #008eb0;
+  transform: translateY(4px);
+}
+
+.button-3d-white {
+  box-shadow: 0 4px 0 #ccdbf4;
+  transition: all 0.15s ease-out;
+}
+.button-3d-white:hover {
+  filter: brightness(1.02);
+}
+.button-3d-white:active {
+  box-shadow: 0 0 0 #ccdbf4;
+  transform: translateY(4px);
+}
+
+/* Card 3D Flip */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+/* Answer Card tap bounce */
+.answer-card {
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.answer-card:hover {
+  transform: translateY(-2px);
+}
+.answer-card:active {
+  transform: scale(0.97) translateY(2px);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d5e3fd;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b7eaff;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
