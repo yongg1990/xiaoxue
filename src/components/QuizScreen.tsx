@@ -338,8 +338,8 @@ export const QuizScreen: React.FC<QuizScreenProps> = ({
         </div>
       </div>
 
-      {/* 4 Options: Single row per option (compact horizontal card) */}
-      <div className="flex flex-col gap-2.5">
+      {/* 4 Options: 2 per row (一行放2个) */}
+      <div className="grid grid-cols-2 gap-2.5">
         {currentQ.options.map((option, index) => {
           const isSelected = selectedOptionId === option.id;
           const isCorrect = option.id === currentQ.correctOptionId;

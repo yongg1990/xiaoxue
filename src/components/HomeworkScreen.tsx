@@ -1206,8 +1206,8 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
                     </div>
                   </div>
 
-                  {/* Options */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  {/* Options (一行放2个) */}
+                  <div className="grid grid-cols-2 gap-2 pt-1">
                     {task.options.map((opt, optIdx) => {
                       const isChosen = selectedOption === optIdx;
                       let optStyle = 'bg-white border-[#dde9ff] hover:border-[#0284c7]';

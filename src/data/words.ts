@@ -68,13 +68,31 @@ export const INITIAL_STUDENTS: StudentProfile[] = [
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80',
     streakDays: 3,
     totalStars: 190,
-    wordsMastered: ['5a-u1-clever', '5a-u2-weekend', '5a-u3-sandwich', '5a-u6-forest'],
-    todayLearnedWords: ['5a-u1-clever', '5a-u2-weekend', '5a-u3-sandwich'],
+    wordsMastered: ['5a-u1-kind', '5a-u2-happy', '5a-u3-weekend', '5a-u6-forest'],
+    todayLearnedWords: ['5a-u1-kind', '5a-u2-happy', '5a-u3-weekend'],
     lastActiveDate: '2026-09-01',
     completedQuizzesCount: 6,
     badgesUnlocked: ['first_step', 'pep_explorer'],
     dailyGoal: 10,
     todayProgress: 30, // 3 / 10 words = 30%
+  },
+  {
+    id: 'student-amy',
+    name: 'Amy',
+    chineseName: '艾米',
+    grade: '六年级 (Grade 6)',
+    gradeLevel: '6',
+    semester: 'A',
+    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=300&auto=format&fit=crop&q=80',
+    streakDays: 9,
+    totalStars: 420,
+    wordsMastered: ['6a-u1-science-museum', '6a-u1-bookstore', '6a-u2-subway', '6a-u5-scientist'],
+    todayLearnedWords: ['6a-u1-science-museum', '6a-u1-bookstore', '6a-u2-subway'],
+    lastActiveDate: '2026-09-01',
+    completedQuizzesCount: 18,
+    badgesUnlocked: ['streak_5', 'first_step', 'voice_star', 'quiz_master', 'pep_explorer'],
+    dailyGoal: 10,
+    todayProgress: 90, // 9 / 10 words = 90%
   }
 ];
 

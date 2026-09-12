@@ -28,7 +28,7 @@ export interface ExamPaper {
   subtitle: string;
   unitName: string;
   totalScore: 100;
-  questionsCount: 100;
+  questionsCount: 50;
   extensionCount: 2;
   sections: {
     title: string;
@@ -36,6 +36,6 @@ export interface ExamPaper {
     endNum: number;
     description: string;
   }[];
-  questions: ExamQuestion[]; // Exactly 100 questions
+  questions: ExamQuestion[]; // Exactly 50 questions
   extensionQuestions: ExamQuestion[]; // Exactly 2 questions
 }

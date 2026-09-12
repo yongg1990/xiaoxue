@@ -10,9 +10,6 @@ import {
   Calculator,
   Compass,
   FileCheck2,
-  RotateCcw,
-  Eye,
-  EyeOff,
   ChevronLeft,
   ChevronRight,
   HelpCircle,
@@ -518,7 +515,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
               </h1>
             </div>
             <p className="text-xs text-[#514532]/80 mt-0.5">
-              满分 100 分 · 共 100 道精选试题 + 2 道拔高思维拓展题
+              满分 100 分 · 共 50 道精选试题 + 2 道拔高思维拓展题
             </p>
           </div>
         </div>
@@ -637,7 +634,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                 {conf.icon}
                 <span>{labels[sub]}</span>
                 <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-full ml-0.5">
-                  100题+2拓展
+                  50题+2拓展
                 </span>
               </button>
             );
@@ -715,7 +712,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                 {paper.unitName}
               </span>
               <span className="text-xs font-bold text-[#514532]/80">
-                满分 100 分 · 每题 1 分
+                满分 100 分 · 每题 2 分
               </span>
             </div>
             <h2 className="text-xl md:text-2xl font-black text-[#0d1c2f]">
@@ -748,7 +745,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                 答题卡 (
                 {isSubmitted
                   ? `${stats.standardCorrect}分`
-                  : `${stats.standardAnswered}/100`}
+                  : `${stats.standardAnswered}/${paper.questionsCount}`}
                 )
               </span>
             </button>
@@ -846,7 +843,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
               : 'bg-[#f0f4fc] text-[#193052] hover:bg-[#e0ebfa]'
           }`}
         >
-          全部 100 题 (分页模式)
+          全部 50 题 (分页模式)
         </button>
 
         {paper.sections.map((sec, sIdx) => {
@@ -1072,12 +1069,8 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                 {q.stem}
               </h3>
 
-              {/* Options Grid */}
-              <div
-                className={`grid gap-2.5 ${
-                  q.options.length === 2 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'
-                }`}
-              >
+              {/* Options Grid (一行放2个) */}
+              <div className="grid grid-cols-2 gap-2.5">
                 {q.options.map((opt, optIdx) => {
                   const isThisChosen = chosen === optIdx;
                   let optStyle =
@@ -1156,54 +1149,6 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         })}
       </div>
 
-      {/* 5.5 Prominent Next Page Card at the bottom of the current page */}
-      <div className="bg-gradient-to-r from-[#eff4ff] via-white to-[#e8faf5] rounded-3xl p-4 md:p-5 border-2 border-[#b2e5dc] flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
-        <button
-          onClick={handlePrevPage}
-          disabled={activeSectionFilter === 'all' && pageIndex === 0}
-          className="w-full sm:w-auto px-5 py-2.5 rounded-2xl bg-white hover:bg-[#e0ebfa] disabled:opacity-30 disabled:pointer-events-none text-xs md:text-sm font-bold text-[#193052] border border-[#dde9ff] flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          <span>上一页</span>
-        </button>
-
-        <div className="text-center">
-          {activeSectionFilter === 'all' ? (
-            <div>
-              <span className="text-xs md:text-sm font-bold text-[#193052]">
-                当前：第 <strong className="text-base text-[#006780] font-black">{pageIndex + 1}</strong> / {totalPages} 页
-              </span>
-              <span className="text-xs text-gray-500 block">
-                (已作答 {stats.standardAnswered} / 100 题)
-              </span>
-            </div>
-          ) : activeSectionFilter === 'ext' ? (
-            <span className="text-xs md:text-sm font-bold text-[#7c5800]">
-              🌟 拔高思维拓展题 (共 2 题)
-            </span>
-          ) : (
-            <span className="text-xs md:text-sm font-bold text-[#193052]">
-              当前：{paper.sections[activeSectionFilter]?.title}
-            </span>
-          )}
-        </div>
-
-        <button
-          id="questions-bottom-next-page-btn"
-          onClick={handleNextPage}
-          className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-[#006780] via-[#00b894] to-[#006780] hover:from-[#00556b] hover:to-[#00a383] text-white font-black text-xs md:text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
-        >
-          <span>
-            {activeSectionFilter === 'all' && pageIndex < totalPages - 1
-              ? `进入下一页 (第 ${pageIndex + 2} 页) ➡️`
-              : activeSectionFilter === 'all' && pageIndex === totalPages - 1
-              ? '进入思维拓展题 🌟'
-              : '进入下一模块 ➡️'}
-          </span>
-          <ChevronRight className="w-4 h-4" />
-        </button>
-      </div>
-
       {/* 6. Pagination Controls (when viewing All 100 questions) */}
       {activeSectionFilter === 'all' && totalPages > 1 && (
         <div className="bg-white rounded-3xl p-4 md:p-5 border-2 border-[#dde9ff] cloud-shadow space-y-3">
@@ -1280,73 +1225,75 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         </div>
       )}
 
-      {/* 6.5 PROMINENT SUBMIT BUTTON AT THE END OF THE EXAM QUESTIONS */}
-      <div className="bg-white rounded-3xl p-6 border-2 border-[#dde9ff] cloud-shadow text-center space-y-4">
-        {isSubmitted ? (
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-black">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>本试卷已提交并完成评分</span>
-            </div>
-            <h3 className="text-xl md:text-2xl font-black text-[#0d1c2f]">
-              考试最终成绩：
-              <span className="text-3xl text-[#006780] mx-1">
-                {stats.standardCorrect}
-              </span>{' '}
-              / 100 分
-            </h3>
-            <p className="text-xs text-gray-500 max-w-md mx-auto">
-              当前学科已被系统锁定，无法再次提交答题。如需重新测试，请点击下方「重新考试」按钮输入教师/家长密码。
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-              <button
-                onClick={scrollToWrongQuestions}
-                className="px-5 py-2.5 rounded-2xl bg-[#eff4ff] hover:bg-[#dde9ff] text-[#006780] font-extrabold text-xs md:text-sm flex items-center gap-2 transition-all cursor-pointer"
-              >
-                <AlertCircle className="w-4 h-4 text-[#ff4757]" />
-                <span>查看所有错题与解析 ({wrongQuestionsList.length} 题)</span>
-              </button>
-              <button
-                id="end-retake-exam-btn"
-                onClick={() => {
-                  sound.playTap();
-                  setRetakePasswordInput('');
-                  setRetakePasswordError('');
-                  setShowRetakeModal(true);
-                }}
-                className="px-5 py-2.5 rounded-2xl bg-[#ff4757] hover:bg-[#e03a49] text-white font-extrabold text-xs md:text-sm flex items-center gap-2 shadow-md transition-all cursor-pointer active:scale-95"
-              >
-                <Unlock className="w-4 h-4" />
-                <span>重新考试 (输入密码2026)</span>
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3 max-w-lg mx-auto">
-            <div className="flex items-center justify-center gap-2">
-              <Award className="w-6 h-6 text-[#ffb800]" />
-              <h3 className="text-lg md:text-xl font-black text-[#0d1c2f]">
-                试卷作答完毕？准备交卷！
+      {/* 6.5 PROMINENT SUBMIT BUTTON AT THE END OF THE EXAM QUESTIONS (当已完成答题数大于等于考题数后才显示) */}
+      {stats.standardAnswered >= paper.questionsCount && (
+        <div className="bg-white rounded-3xl p-6 border-2 border-[#dde9ff] cloud-shadow text-center space-y-4">
+          {isSubmitted ? (
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-black">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span>本试卷已提交并完成评分</span>
+              </div>
+              <h3 className="text-xl md:text-2xl font-black text-[#0d1c2f]">
+                考试最终成绩：
+                <span className="text-3xl text-[#006780] mx-1">
+                  {stats.standardCorrect}
+                </span>{' '}
+                / 100 分
               </h3>
+              <p className="text-xs text-gray-500 max-w-md mx-auto">
+                当前学科已被系统锁定，无法再次提交答题。如需重新测试，请点击下方「重新考试」按钮输入教师/家长密码。
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <button
+                  onClick={scrollToWrongQuestions}
+                  className="px-5 py-2.5 rounded-2xl bg-[#eff4ff] hover:bg-[#dde9ff] text-[#006780] font-extrabold text-xs md:text-sm flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <AlertCircle className="w-4 h-4 text-[#ff4757]" />
+                  <span>查看所有错题与解析 ({wrongQuestionsList.length} 题)</span>
+                </button>
+                <button
+                  id="end-retake-exam-btn"
+                  onClick={() => {
+                    sound.playTap();
+                    setRetakePasswordInput('');
+                    setRetakePasswordError('');
+                    setShowRetakeModal(true);
+                  }}
+                  className="px-5 py-2.5 rounded-2xl bg-[#ff4757] hover:bg-[#e03a49] text-white font-extrabold text-xs md:text-sm flex items-center gap-2 shadow-md transition-all cursor-pointer active:scale-95"
+                >
+                  <Unlock className="w-4 h-4" />
+                  <span>重新考试 (输入密码2026)</span>
+                </button>
+              </div>
             </div>
-            <p className="text-xs text-[#514532]/80">
-              当前已完成答题：
-              <strong className="text-base text-[#006780] font-black mx-1">
-                {stats.standardAnswered}
-              </strong>
-              / {paper.questionsCount} 题。交卷后系统将自动评分并收录错题。
-            </p>
-            <button
-              id="submit-exam-end-button"
-              onClick={handleInitiateSubmit}
-              className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-[#006780] via-[#00b894] to-[#006780] hover:from-[#00556b] hover:to-[#00a383] text-white font-black text-sm md:text-base flex items-center justify-center gap-2.5 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer mx-auto"
-            >
-              <Send className="w-5 h-5 text-yellow-300" />
-              <span>提交试卷 · 查看最终得分与错题订正</span>
-            </button>
-          </div>
-        )}
-      </div>
+          ) : (
+            <div className="space-y-3 max-w-lg mx-auto">
+              <div className="flex items-center justify-center gap-2">
+                <Award className="w-6 h-6 text-[#ffb800]" />
+                <h3 className="text-lg md:text-xl font-black text-[#0d1c2f]">
+                  试卷作答完毕？准备交卷！
+                </h3>
+              </div>
+              <p className="text-xs text-[#514532]/80">
+                当前已完成答题：
+                <strong className="text-base text-[#006780] font-black mx-1">
+                  {stats.standardAnswered}
+                </strong>
+                / {paper.questionsCount} 题。交卷后系统将自动评分并收录错题。
+              </p>
+              <button
+                id="submit-exam-end-button"
+                onClick={handleInitiateSubmit}
+                className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-[#006780] via-[#00b894] to-[#006780] hover:from-[#00556b] hover:to-[#00a383] text-white font-black text-sm md:text-base flex items-center justify-center gap-2.5 shadow-lg hover:shadow-xl transition-all active:scale-95 cursor-pointer mx-auto"
+              >
+                <Send className="w-5 h-5 text-yellow-300" />
+                <span>提交试卷 · 查看最终得分与错题订正</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 7. DEDICATED WRONG QUESTIONS SECTION AT THE VERY BOTTOM (错题专区) */}
       {isSubmitted && (
@@ -1396,7 +1343,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                 太厉害了！全对满分，零错题！🎉
               </h3>
               <p className="text-xs md:text-sm text-[#2b5d00]/80 max-w-md mx-auto">
-                恭喜你在本次第一单元全真测试中获得了 100
+                恭喜你在本次综合素养测试中获得了 100
                 分满分的优异成绩，知识点掌握极为扎实！
               </p>
             </div>
@@ -1469,7 +1416,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                     </h4>
 
                     {/* COMPARISON BLOCKS: Student Wrong Answer vs Correct Answer */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                    <div className="grid grid-cols-2 gap-3 mb-4">
                       {/* Student's Wrong Answer Block */}
                       <div className="bg-[#ffebee] border-2 border-[#ff4757] rounded-2xl p-3.5 space-y-1">
                         <div className="flex items-center gap-1.5 text-xs font-black text-[#d63031]">
@@ -1493,49 +1440,51 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                       </div>
                     </div>
 
-                    {/* All Options Breakdown */}
+                    {/* All Options Breakdown (一行放2个) */}
                     <div className="space-y-1.5 mb-4">
                       <span className="text-[11px] font-bold text-gray-500 block">
                         全部选项明细：
                       </span>
-                      {q.options.map((opt, optIdx) => {
-                        const isStudentChosen = item.studentAnswerIndex === optIdx;
-                        const isCorrectOpt = optIdx === q.correctAnswer;
+                      <div className="grid grid-cols-2 gap-2">
+                        {q.options.map((opt, optIdx) => {
+                          const isStudentChosen = item.studentAnswerIndex === optIdx;
+                          const isCorrectOpt = optIdx === q.correctAnswer;
 
-                        let style = 'bg-white border-gray-200 text-gray-600';
-                        if (isCorrectOpt) {
-                          style =
-                            'bg-[#e8f5e9] border-[#2b5d00] text-[#2b5d00] font-black ring-2 ring-[#2b5d00]/30';
-                        } else if (isStudentChosen) {
-                          style =
-                            'bg-[#ffebee] border-[#ff4757] text-[#ff4757] font-bold line-through';
-                        }
+                          let style = 'bg-white border-gray-200 text-gray-600';
+                          if (isCorrectOpt) {
+                            style =
+                              'bg-[#e8f5e9] border-[#2b5d00] text-[#2b5d00] font-black ring-2 ring-[#2b5d00]/30';
+                          } else if (isStudentChosen) {
+                            style =
+                              'bg-[#ffebee] border-[#ff4757] text-[#ff4757] font-bold line-through';
+                          }
 
-                        return (
-                          <div
-                            key={optIdx}
-                            className={`p-2.5 rounded-xl border text-xs flex items-center justify-between ${style}`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="w-4 h-4 rounded-full border border-current flex items-center justify-center text-[10px] font-bold">
-                                {String.fromCharCode(65 + optIdx)}
-                              </span>
-                              <span>{opt}</span>
+                          return (
+                            <div
+                              key={optIdx}
+                              className={`p-2.5 rounded-xl border text-xs flex items-center justify-between ${style}`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="w-4 h-4 rounded-full border border-current flex items-center justify-center text-[10px] font-bold shrink-0">
+                                  {String.fromCharCode(65 + optIdx)}
+                                </span>
+                                <span>{opt}</span>
+                              </div>
+
+                              {isCorrectOpt && (
+                                <span className="text-[10px] font-black bg-[#2b5d00] text-white px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                                  <Check className="w-3 h-3" /> 正确选项
+                                </span>
+                              )}
+                              {isStudentChosen && !isCorrectOpt && (
+                                <span className="text-[10px] font-black bg-[#ff4757] text-white px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                                  你的选择 (错误)
+                                </span>
+                              )}
                             </div>
-
-                            {isCorrectOpt && (
-                              <span className="text-[10px] font-black bg-[#2b5d00] text-white px-2 py-0.5 rounded-full flex items-center gap-1">
-                                <Check className="w-3 h-3" /> 正确选项
-                              </span>
-                            )}
-                            {isStudentChosen && !isCorrectOpt && (
-                              <span className="text-[10px] font-black bg-[#ff4757] text-white px-2 py-0.5 rounded-full flex items-center gap-1">
-                                你的选择 (错误)
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
 
                     {/* Deep Explanation Box */}
@@ -1555,130 +1504,6 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
           )}
         </div>
       )}
-
-      {/* 8. Bottom Fixed Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t-2 border-[#dde9ff] p-2.5 md:p-3.5 shadow-lg">
-        <div className="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          {isSubmitted ? (
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="text-xs">
-                <span className="text-gray-500 font-bold">考试已交卷：</span>
-                <span className="font-black text-[#006780] text-sm">
-                  {stats.standardCorrect}
-                </span>
-                <span className="text-gray-400"> / 100 分</span>
-              </div>
-              <button
-                onClick={scrollToWrongQuestions}
-                className="text-xs font-bold text-[#ff4757] hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                <AlertCircle className="w-3.5 h-3.5" />
-                <span>查看错题 ({wrongQuestionsList.length})</span>
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <div className="text-xs">
-                <span className="text-gray-500 font-bold">已答：</span>
-                <span className="font-extrabold text-[#006780]">
-                  {stats.standardAnswered}
-                </span>
-                <span className="text-gray-400"> / {paper.questionsCount}</span>
-              </div>
-
-              {examMode === 'practice' && (
-                <button
-                  onClick={() =>
-                    setShowExplanationAlways(!showExplanationAlways)
-                  }
-                  className="hidden sm:flex text-xs text-[#006780] hover:underline font-bold items-center gap-1 cursor-pointer"
-                >
-                  {showExplanationAlways ? (
-                    <EyeOff className="w-3.5 h-3.5" />
-                  ) : (
-                    <Eye className="w-3.5 h-3.5" />
-                  )}
-                  <span>
-                    {showExplanationAlways ? '隐藏未答解析' : '展开所有解析'}
-                  </span>
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Center: Always-Visible Page Switcher on Every Page */}
-          <div className="flex items-center gap-1 bg-[#f0f4fc] p-1 rounded-2xl border border-[#dde9ff]">
-            <button
-              id="footer-prev-page-btn"
-              onClick={handlePrevPage}
-              disabled={activeSectionFilter === 'all' && pageIndex === 0}
-              title="上一页"
-              className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-[#e0ebfa] disabled:opacity-30 disabled:pointer-events-none text-xs font-bold text-[#193052] flex items-center gap-1 cursor-pointer shadow-xs transition-all active:scale-95"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">上一页</span>
-            </button>
-
-            <span className="text-xs font-black text-[#006780] px-2 whitespace-nowrap">
-              {activeSectionFilter === 'all'
-                ? `第 ${pageIndex + 1} / ${totalPages} 页`
-                : activeSectionFilter === 'ext'
-                ? '拓展题'
-                : `模块 ${Number(activeSectionFilter) + 1}`}
-            </span>
-
-            <button
-              id="footer-next-page-btn"
-              onClick={handleNextPage}
-              title="切换下一页"
-              className="px-3 py-1.5 rounded-xl bg-[#006780] hover:bg-[#00556b] text-white text-xs font-bold flex items-center gap-1 cursor-pointer shadow-xs transition-all active:scale-95"
-            >
-              <span>下一页</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {isSubmitted ? (
-              <button
-                id="footer-retake-btn"
-                onClick={() => {
-                  sound.playTap();
-                  setRetakePasswordInput('');
-                  setRetakePasswordError('');
-                  setShowRetakeModal(true);
-                }}
-                className="px-4 md:px-5 py-2 md:py-2.5 rounded-2xl bg-gradient-to-r from-[#ff4757] to-[#ee5253] hover:from-[#e03a49] hover:to-[#d63031] text-white font-extrabold text-xs md:text-sm flex items-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
-              >
-                <Unlock className="w-4 h-4" />
-                <span>重新考试 (密码2026)</span>
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => {
-                    sound.playTap();
-                    setAnswers({});
-                  }}
-                  className="hidden sm:flex px-3 py-2 rounded-2xl bg-[#f0f4fc] hover:bg-[#e0ebfa] text-xs font-bold text-[#193052] items-center gap-1 transition-all cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>重填</span>
-                </button>
-
-                <button
-                  id="submit-exam-button"
-                  onClick={handleInitiateSubmit}
-                  className="px-4 md:px-5 py-2 md:py-2.5 rounded-2xl bg-gradient-to-r from-[#006780] to-[#00b894] hover:from-[#00556b] hover:to-[#00a383] text-white font-extrabold text-xs md:text-sm flex items-center gap-1.5 shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer"
-                >
-                  <Award className="w-4 h-4 text-yellow-300" />
-                  <span>交卷评分</span>
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* 9. Score Result Modal */}
       {showResultModal && (

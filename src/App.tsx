@@ -379,6 +379,7 @@ export default function App() {
               if (uId) setSelectedUnitId(uId);
               setActiveTab('cards');
             }}
+            onAddStars={handleAddStars}
           />
         )}
 

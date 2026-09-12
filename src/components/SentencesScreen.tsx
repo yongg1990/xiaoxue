@@ -1,9 +1,14 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { SentenceItem, SemesterKey, WordToken } from '../types';
 import { PEP_GRADE_3_SENTENCES } from '../data/pepGrade3Sentences';
 import { PEP_GRADE_4_SENTENCES } from '../data/pepGrade4Sentences';
 import { PEP_GRADE_5_SENTENCES } from '../data/pepGrade5Sentences';
 import { PEP_GRADE_6_SENTENCES } from '../data/pepGrade6Sentences';
+import {
+  startSpeechRecordingSession,
+  SpeechEvaluationResult,
+  RecordingSession,
+} from '../utils/speechEvaluator';
 
 const ALL_PEP_SENTENCES: SentenceItem[] = [
   ...PEP_GRADE_3_SENTENCES,
@@ -36,6 +41,7 @@ interface SentencesScreenProps {
   initialUnitId?: string;
   onBackToHome?: () => void;
   onNavigateToWords?: (unitId?: string) => void;
+  onAddStars?: (stars: number) => void;
 }
 
 type ViewMode = 'reader' | 'reorder' | 'listen';
@@ -45,6 +51,7 @@ export const SentencesScreen: React.FC<SentencesScreenProps> = ({
   initialUnitId,
   onBackToHome,
   onNavigateToWords,
+  onAddStars,
 }) => {
   const [selectedSemesterKey, setSelectedSemesterKey] = useState<SemesterKey>(
     initialSemesterKey || '3A'
@@ -109,9 +116,14 @@ export const SentencesScreen: React.FC<SentencesScreenProps> = ({
   const [quizSelectedOption, setQuizSelectedOption] = useState<string | null>(null);
   const [quizIsAnswered, setQuizIsAnswered] = useState<boolean>(false);
 
-  // Read aloud recording simulation state
-  const [speakingSentenceId, setSpeakingSentenceId] = useState<string | null>(null);
-  const [recordingScore, setRecordingScore] = useState<{ sentenceId: string; score: number } | null>(null);
+  // Real microphone speech evaluation state
+  const [activeRecordingSentenceId, setActiveRecordingSentenceId] = useState<string | null>(null);
+  const [recordingVolume, setRecordingVolume] = useState<number>(0);
+  const [interimTranscript, setInterimTranscript] = useState<string>('');
+  const [recordingStatus, setRecordingStatus] = useState<'idle' | 'recording' | 'processing'>('idle');
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [evaluationResults, setEvaluationResults] = useState<Record<string, SpeechEvaluationResult>>({});
+  const sessionRef = useRef<RecordingSession | null>(null);
 
   // Toggle star
   const handleToggleStar = (sentenceId: string) => {
@@ -247,22 +259,96 @@ export const SentencesScreen: React.FC<SentencesScreenProps> = ({
     speakText(token.word, 'en-US', 0.75);
   };
 
-  // Follow-me reading simulation
+  // Real microphone follow-me reading handler
   const handleStartRecording = (sentence: SentenceItem) => {
+    // If already recording this sentence, stop and trigger immediate evaluation
+    if (activeRecordingSentenceId === sentence.id) {
+      sound.playTap();
+      sessionRef.current?.stop();
+      return;
+    }
+
+    // If recording another sentence, cancel it first
+    if (sessionRef.current) {
+      sessionRef.current.cancel();
+      sessionRef.current = null;
+    }
+
     sound.playTap();
-    setSpeakingSentenceId(sentence.id);
-    speakText(sentence.sentence, 'en-US', 0.72);
-    // Simulate kid finishing reading after 3.5s with a high celebratory score
-    setTimeout(() => {
-      sound.playCorrect();
-      triggerConfetti();
-      setSpeakingSentenceId(null);
-      setRecordingScore({
-        sentenceId: sentence.id,
-        score: Math.floor(Math.random() * 8) + 92, // 92 - 99 score
-      });
-    }, 3800);
+    setActiveRecordingSentenceId(sentence.id);
+    setRecordingVolume(0);
+    setInterimTranscript('');
+    setRecordingStatus('recording');
+    setRecordingError(null);
+
+    const session = startSpeechRecordingSession({
+      targetText: sentence.sentence,
+      onVolumeChange: (vol) => {
+        setRecordingVolume(vol);
+      },
+      onInterimTranscript: (text) => {
+        setInterimTranscript(text);
+      },
+      onStateChange: (st) => {
+        if (st === 'processing') setRecordingStatus('processing');
+        if (st === 'done') setRecordingStatus('idle');
+      },
+      onComplete: (res) => {
+        setActiveRecordingSentenceId(null);
+        setRecordingStatus('idle');
+        setEvaluationResults((prev) => ({
+          ...prev,
+          [sentence.id]: res,
+        }));
+
+        if (res.score >= 90) {
+          sound.playCorrect();
+          triggerConfetti();
+          if (onAddStars) onAddStars(5);
+        } else if (res.score >= 60) {
+          sound.playTap();
+        } else {
+          sound.playWrong();
+        }
+      },
+      onError: (err) => {
+        setActiveRecordingSentenceId(null);
+        setRecordingStatus('idle');
+        setRecordingError(err);
+        sound.playWrong();
+      },
+    });
+
+    sessionRef.current = session;
   };
+
+  const handleStopRecording = () => {
+    sound.playTap();
+    if (sessionRef.current) {
+      sessionRef.current.stop();
+    }
+  };
+
+  const handleCancelRecording = () => {
+    sound.playTap();
+    if (sessionRef.current) {
+      sessionRef.current.cancel();
+      sessionRef.current = null;
+    }
+    setActiveRecordingSentenceId(null);
+    setRecordingStatus('idle');
+    setInterimTranscript('');
+    setRecordingVolume(0);
+  };
+
+  // Cancel recording session if component unmounts
+  useEffect(() => {
+    return () => {
+      if (sessionRef.current) {
+        sessionRef.current.cancel();
+      }
+    };
+  }, []);
 
   // Clean active token on page/unit change
   useEffect(() => {
@@ -280,19 +366,19 @@ export const SentencesScreen: React.FC<SentencesScreenProps> = ({
           <div>
             <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold tracking-wide uppercase text-white/95 mb-2">
               <Sparkles className="w-3.5 h-3.5 text-[#ffb800]" />
-              {selectedSemesterKey.startsWith('3') ? '2024秋季新版 PEP 人教版课本同步' : '人教版（PEP）小学英语课文同步'}
+              人教版（PEP版，义务教育教科书 / 2024新版）课本同步
             </div>
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
               {selectedSemesterKey.startsWith('3')
-                ? '三年级（2024新课标版）'
+                ? '三年级'
                 : selectedSemesterKey.startsWith('4')
-                ? '四年级（PEP人教版）'
+                ? '四年级'
                 : selectedSemesterKey.startsWith('5')
-                ? '五年级（PEP人教版）'
-                : '六年级（PEP人教版）'}课本每页句子研读
+                ? '五年级'
+                : '六年级'}（人教PEP·2024新版）课本句子研读
             </h1>
             <p className="text-white/90 text-sm md:text-base mt-1 max-w-2xl">
-              精选人教版PEP小学英语重点课文句子，标注完整中文释义，提供
+              精选人教版PEP小学英语（义务教育教科书 / 2024新版）核心课文句子，标注完整中文释义，提供
               <span className="text-[#ffd666] font-bold">「单个单词逐词释义拆解」</span>
               与智能点读跟读！
             </p>
@@ -302,14 +388,14 @@ export const SentencesScreen: React.FC<SentencesScreenProps> = ({
           <div className="flex flex-wrap bg-black/25 p-1.5 rounded-2xl border border-white/20 gap-1 max-w-xl">
             {(
               [
-                { key: '3A', label: '三上 (3A)', badge: '新版', activeColor: 'bg-[#ffb800] text-[#513500]' },
-                { key: '3B', label: '三下 (3B)', badge: '新版', activeColor: 'bg-[#5ed8ff] text-[#003847]' },
-                { key: '4A', label: '四上 (4A)', badge: 'PEP', activeColor: 'bg-[#48bb78] text-[#134e29]' },
-                { key: '4B', label: '四下 (4B)', badge: 'PEP', activeColor: 'bg-[#38b2ac] text-[#0c4a47]' },
-                { key: '5A', label: '五上 (5A)', badge: 'PEP', activeColor: 'bg-[#6ee7b7] text-[#064e3b]' },
-                { key: '5B', label: '五下 (5B)', badge: 'PEP', activeColor: 'bg-[#a78bfa] text-[#2e1065]' },
-                { key: '6A', label: '六上 (6A)', badge: 'PEP', activeColor: 'bg-[#f6ad55] text-[#744210]' },
-                { key: '6B', label: '六下 (6B)', badge: 'PEP', activeColor: 'bg-[#fc8181] text-[#742a2a]' },
+                { key: '3A', label: '三上 (3A)', badge: '2024新版', activeColor: 'bg-[#ffb800] text-[#513500]' },
+                { key: '3B', label: '三下 (3B)', badge: '2024新版', activeColor: 'bg-[#5ed8ff] text-[#003847]' },
+                { key: '4A', label: '四上 (4A)', badge: '2024新版', activeColor: 'bg-[#48bb78] text-[#134e29]' },
+                { key: '4B', label: '四下 (4B)', badge: '2024新版', activeColor: 'bg-[#38b2ac] text-[#0c4a47]' },
+                { key: '5A', label: '五上 (5A)', badge: '2024新版', activeColor: 'bg-[#6ee7b7] text-[#064e3b]' },
+                { key: '5B', label: '五下 (5B)', badge: '2024新版', activeColor: 'bg-[#a78bfa] text-[#2e1065]' },
+                { key: '6A', label: '六上 (6A)', badge: '2024新版', activeColor: 'bg-[#f6ad55] text-[#744210]' },
+                { key: '6B', label: '六下 (6B)', badge: '2024新版', activeColor: 'bg-[#fc8181] text-[#742a2a]' },
               ] as const
             ).map((item) => {
               const isSelected = selectedSemesterKey === item.key;
@@ -532,8 +618,8 @@ export const SentencesScreen: React.FC<SentencesScreenProps> = ({
             <div className="space-y-6">
               {filteredSentences.map((item, index) => {
                 const isStarred = starredIds.has(item.id);
-                const isRecording = speakingSentenceId === item.id;
-                const scoreInfo = recordingScore?.sentenceId === item.id ? recordingScore : null;
+                const isRecording = activeRecordingSentenceId === item.id;
+                const evalResult = evaluationResults[item.id];
 
                 return (
                   <div
@@ -689,72 +775,251 @@ export const SentencesScreen: React.FC<SentencesScreenProps> = ({
                       </button>
 
                       <button
+                        id={`btn-speech-eval-${item.id}`}
                         onClick={() => handleStartRecording(item)}
-                        disabled={isRecording}
                         className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs md:text-sm font-bold transition-all active:scale-95 cursor-pointer ${
                           isRecording
-                            ? 'bg-red-500 text-white animate-pulse'
+                            ? 'bg-[#ba1a1a] text-white ring-2 ring-red-300 shadow-md animate-pulse'
+                            : evalResult
+                            ? evalResult.score >= 90
+                              ? 'bg-[#ebfbee] text-[#2b8a3e] border border-[#a9e34b] hover:bg-[#d3f9d8]'
+                              : evalResult.score >= 60
+                              ? 'bg-[#e7f5ff] text-[#1971c2] border border-[#a5d8ff] hover:bg-[#d0ebff]'
+                              : 'bg-[#fff5f5] text-[#e03131] border border-[#ffc9c9] hover:bg-[#ffe3e3]'
                             : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'
                         }`}
                       >
-                        <Mic className="w-4 h-4" />
-                        <span>{isRecording ? '正在倾听打分中...' : '🎤 跟着大声读'}</span>
+                        <Mic className={`w-4 h-4 ${isRecording ? 'animate-bounce text-yellow-300' : ''}`} />
+                        <span>
+                          {isRecording
+                            ? '⏹️ 停止录音并打分'
+                            : evalResult
+                            ? `🔄 重新跟读 (${evalResult.score}分)`
+                            : '🎤 麦克风跟读打分'}
+                        </span>
                       </button>
 
-                      {scoreInfo && (
-                        <div className="bg-green-100 border border-green-300 text-green-800 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 animate-bounce">
-                          <CheckCircle2 className="w-4 h-4 text-green-600" />
-                          <span>发音评测：{scoreInfo.score}分！太棒了 ⭐⭐⭐</span>
-                        </div>
+                      {isRecording && (
+                        <button
+                          onClick={handleCancelRecording}
+                          className="px-2.5 py-2 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 border border-gray-200 cursor-pointer"
+                        >
+                          取消
+                        </button>
                       )}
                     </div>
 
-                    {/* Word-by-word Breakdown Table/Tags (核心要求：句子中单个单词的意思备注) */}
-                    <div className="mt-4 pt-3 border-t border-gray-100">
-                      <div className="flex items-center gap-1.5 mb-2.5">
-                        <BookOpen className="w-4 h-4 text-[#006780]" />
-                        <h4 className="text-xs md:text-sm font-bold text-gray-700">
-                          本句单个单词释义备注 (Word-by-Word Breakdown)
-                        </h4>
-                      </div>
+                    {/* Live Recording Panel with VAD Volume Meter */}
+                    {isRecording && (
+                      <div className="bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-200 rounded-2xl p-4 my-2.5 space-y-2.5 animate-fade-in">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="relative flex h-3 w-3">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                            </span>
+                            <span className="text-xs md:text-sm font-black text-red-700">
+                              {recordingStatus === 'processing'
+                                ? '正在智能分析语音与发音准确度...'
+                                : '🎙️ 正在录音，请对准麦克风大声朗读课文句子！'}
+                            </span>
+                          </div>
+                          <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-white border border-red-200 text-red-700">
+                            {recordingVolume > 10 ? '🟢 感应到声音' : '⚪ 等待发音中...'}
+                          </span>
+                        </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                        {item.wordsBreakdown.map((token, bIdx) => (
-                          <div
-                            key={`breakdown-${token.word}-${bIdx}`}
-                            onClick={() => handlePlayToken(token)}
-                            className="bg-gray-50/90 hover:bg-blue-50/70 border border-gray-200/80 hover:border-blue-300 rounded-xl p-2.5 flex items-start justify-between gap-2 transition-all cursor-pointer group"
+                        {/* Live Volume Meter Bar */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[10px] font-bold text-gray-600">
+                            <span>实时麦克风音量感知 (未出声则不会误判打分)：</span>
+                            <span className={recordingVolume > 10 ? 'text-green-600 font-black' : 'text-gray-400'}>
+                              {recordingVolume}%
+                            </span>
+                          </div>
+                          <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-75 rounded-full ${
+                                recordingVolume > 40
+                                  ? 'bg-gradient-to-r from-green-500 to-emerald-400'
+                                  : recordingVolume > 10
+                                  ? 'bg-gradient-to-r from-yellow-400 to-green-400'
+                                  : 'bg-gray-300'
+                              }`}
+                              style={{ width: `${Math.max(3, recordingVolume)}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Real-time recognized text preview */}
+                        <div className="bg-white/90 border border-red-100 rounded-xl px-3 py-2 text-xs">
+                          <span className="text-gray-400 font-medium mr-1.5">已捕捉文字:</span>
+                          <span className="font-bold text-[#0d1c2f]">
+                            {interimTranscript ? `"${interimTranscript}"` : '（对准麦克风发音，文字将在此实时显示）'}
+                          </span>
+                        </div>
+
+                        {/* Prompt & Finish button */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                          <p className="text-[11px] text-red-600 font-medium">
+                            💡 读完后点击“读完了，交卷打分”即可查看真实发音评分与单词比对
+                          </p>
+                          <button
+                            onClick={handleStopRecording}
+                            className="bg-[#d63031] text-white px-4 py-1.5 rounded-xl text-xs font-black hover:bg-[#b71515] active:scale-95 transition-all shadow cursor-pointer"
                           >
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-extrabold text-[#006780] text-sm group-hover:text-blue-700">
-                                  {token.word}
+                            ⏹️ 读完了，交卷打分
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recording Error Alert */}
+                    {recordingError && isRecording && (
+                      <div className="bg-red-100 border border-red-300 text-red-800 rounded-xl p-3 my-2 text-xs font-bold">
+                        {recordingError}
+                      </div>
+                    )}
+
+                    {/* Speech Evaluation Result Card */}
+                    {evalResult && !isRecording && (
+                      <div
+                        className={`rounded-2xl p-4 my-2.5 border-2 transition-all ${
+                          evalResult.score >= 90
+                            ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-300'
+                            : evalResult.score >= 60
+                            ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200'
+                            : evalResult.score > 0
+                            ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-300'
+                            : 'bg-gradient-to-r from-red-50 to-rose-50 border-red-300'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2 pb-2 border-b border-black/5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">
+                              {evalResult.score >= 90
+                                ? '🌟'
+                                : evalResult.score >= 60
+                                ? '👍'
+                                : evalResult.score > 0
+                                ? '💡'
+                                : '❌'}
+                            </span>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`text-base font-black ${
+                                    evalResult.score >= 90
+                                      ? 'text-green-800'
+                                      : evalResult.score >= 60
+                                      ? 'text-blue-800'
+                                      : evalResult.score > 0
+                                      ? 'text-amber-800'
+                                      : 'text-red-800'
+                                  }`}
+                                >
+                                  发音实测得分：{evalResult.score} 分
                                 </span>
-                                {token.partOfSpeech && (
-                                  <span className="text-[10px] text-gray-500 bg-white border border-gray-200 px-1 rounded">
-                                    {token.partOfSpeech}
-                                  </span>
-                                )}
+                                <span
+                                  className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full ${
+                                    evalResult.score >= 90
+                                      ? 'bg-green-200 text-green-900'
+                                      : evalResult.score >= 60
+                                      ? 'bg-blue-200 text-blue-900'
+                                      : evalResult.score > 0
+                                      ? 'bg-amber-200 text-amber-900'
+                                      : 'bg-red-200 text-red-900'
+                                  }`}
+                                >
+                                  {evalResult.status === 'no_voice'
+                                    ? '未检测到发音 (0分)'
+                                    : evalResult.status === 'too_short'
+                                    ? '发音过短/未识别'
+                                    : evalResult.status === 'incorrect'
+                                    ? '发音不符'
+                                    : evalResult.status === 'partial'
+                                    ? '部分读准'
+                                    : evalResult.status === 'good'
+                                    ? '良好流畅'
+                                    : '标准优秀'}
+                                </span>
                               </div>
-                              {token.phonetic && (
-                                <p className="text-[11px] text-gray-400 font-mono">
-                                  {token.phonetic}
-                                </p>
-                              )}
-                              <p className="text-xs font-medium text-gray-700 mt-0.5">
-                                {token.meaning}
+                              <p
+                                className={`text-xs font-bold mt-0.5 ${
+                                  evalResult.score >= 90
+                                  ? 'text-green-700'
+                                  : evalResult.score >= 60
+                                  ? 'text-blue-700'
+                                  : evalResult.score > 0
+                                  ? 'text-amber-700'
+                                  : 'text-red-700'
+                                }`}
+                              >
+                                {evalResult.feedback}
                               </p>
                             </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
                             <button
-                              title="点击发音"
-                              className="text-gray-400 group-hover:text-[#006780] p-1 shrink-0"
+                              onClick={() => handlePlaySentence(item, 0.72)}
+                              className="text-xs font-bold bg-white text-[#006780] border border-[#006780]/30 hover:bg-[#006780]/5 px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer shadow-xs"
                             >
                               <Volume2 className="w-3.5 h-3.5" />
+                              <span>听原音</span>
+                            </button>
+                            <button
+                              onClick={() => handleStartRecording(item)}
+                              className="text-xs font-bold bg-[#006780] text-white hover:bg-[#005166] px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer shadow-xs"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>重新跟读</span>
                             </button>
                           </div>
-                        ))}
+                        </div>
+
+                        {/* Transcript & Word Breakdown comparison */}
+                        <div className="space-y-2 text-xs">
+                          {evalResult.transcript ? (
+                            <div className="flex items-start gap-1.5 bg-white/80 rounded-xl p-2.5 border border-black/5">
+                              <span className="font-bold text-gray-500 shrink-0">听到的语音：</span>
+                              <span className="font-bold text-gray-800">
+                                "{evalResult.transcript}"
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="bg-white/80 rounded-xl p-2.5 border border-red-200 text-red-700 font-bold flex items-center gap-1.5">
+                              <span>⚠️</span>
+                              <span>麦克风没有检测到发音声音，请对准麦克风大声朗读，不要静音哦！</span>
+                            </div>
+                          )}
+
+                          {/* Word-by-word correctness tags */}
+                          {evalResult.tokenMatches.length > 0 && (
+                            <div>
+                              <span className="text-[11px] font-bold text-gray-500 block mb-1">
+                                课文单词逐词匹配检测：
+                              </span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {evalResult.tokenMatches.map((tm, tmIdx) => (
+                                  <span
+                                    key={`token-match-${tm.word}-${tmIdx}`}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border shadow-xs ${
+                                      tm.matched
+                                        ? 'bg-green-100 text-green-900 border-green-300'
+                                        : 'bg-red-50 text-red-700 border-red-200'
+                                    }`}
+                                  >
+                                    <span>{tm.matched ? '✓' : '✕'}</span>
+                                    <span>{tm.word}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Grammar / Daily Note */}
                     {item.grammarTip && (
