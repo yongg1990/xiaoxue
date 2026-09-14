@@ -40,6 +40,11 @@ import {
   getUnitDailyStat,
   getTodayDateString,
 } from '../utils/homeworkStats';
+import {
+  getUnitHomeworkPackage,
+  UnitHomeworkPackage,
+  HomeworkQuestionItem,
+} from '../data/homework';
 
 interface HomeworkScreenProps {
   currentStudent: StudentProfile;
@@ -69,16 +74,23 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
       : '3';
   });
 
+  // Sync selectedGrade if current student changes
+  useEffect(() => {
+    if (currentStudent?.gradeLevel) {
+      const validGrades: HomeworkGrade[] = ['3', '4', '5', '6'];
+      if (validGrades.includes(currentStudent.gradeLevel as HomeworkGrade)) {
+        setSelectedGrade(currentStudent.gradeLevel as HomeworkGrade);
+      }
+    }
+  }, [currentStudent?.gradeLevel]);
+
   // 2. Subject Selection (语文 vs 数学 vs 英语)
   const [selectedSubject, setSelectedSubject] = useState<HomeworkSubject>('chinese');
 
   // 3. Unit Selection (Unit 1 ~ Unit 6) - 默认第 1 单元
   const [selectedUnitNumber, setSelectedUnitNumber] = useState<number>(1);
 
-  // 4. Cumulative Review Toggle (是否包含前置已学单元，如选第3单元包含1,2单元)
-  const [includePreviousUnits, setIncludePreviousUnits] = useState<boolean>(true);
-
-  // 5. Drag & Drop state
+  // 4. Drag & Drop state
   const [exerciseIndex, setExerciseIndex] = useState(0);
   // questionId -> chosen optionId
   const [placedMatches, setPlacedMatches] = useState<Record<string, string>>({});
@@ -87,12 +99,19 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
   const [dragErrorSlotId, setDragErrorSlotId] = useState<string | null>(null);
   const [isDragCompleted, setIsDragCompleted] = useState<boolean>(false);
 
-  // 6. Daily tasks state: questionId -> chosenOptionIndex
+  // 5. Unit Homework tasks state: questionId -> chosenOptionIndex
   const [taskAnswers, setTaskAnswers] = useState<Record<string, number>>({});
   const [submittedTasks, setSubmittedTasks] = useState<boolean>(false);
-  const [activeTabSub, setActiveTabSub] = useState<'drag' | 'daily'>('drag');
+  const [submitScoreInfo, setSubmitScoreInfo] = useState<{
+    correctCount: number;
+    wrongCount: number;
+    totalCount: number;
+    scorePercent: number;
+  } | null>(null);
+  // Default to daily unit homework: 10-15 practice questions + 1 extension question
+  const [activeTabSub, setActiveTabSub] = useState<'drag' | 'daily'>('daily');
 
-  // 7. Statistics Modal & Real-time tracker for each day, subject, and unit
+  // 6. Statistics Modal & Real-time tracker for each day, subject, and unit
   const [showStatsModal, setShowStatsModal] = useState<boolean>(false);
   const [statsUpdateKey, setStatsUpdateKey] = useState<number>(0);
   const todayStr = useMemo(() => getTodayDateString(), []);
@@ -109,6 +128,7 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
     setSelectedOptionForTap(null);
     setTaskAnswers({});
     setSubmittedTasks(false);
+    setSubmitScoreInfo(null);
   };
 
   const handleRequestSubject = (newSubject: HomeworkSubject) => {
@@ -121,6 +141,7 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
     setSelectedOptionForTap(null);
     setTaskAnswers({});
     setSubmittedTasks(false);
+    setSubmitScoreInfo(null);
   };
 
   const handleRequestUnit = (newUnit: number) => {
@@ -132,6 +153,7 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
     setSelectedOptionForTap(null);
     setTaskAnswers({});
     setSubmittedTasks(false);
+    setSubmitScoreInfo(null);
   };
 
   useEffect(() => {
@@ -161,8 +183,39 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
     return HOMEWORK_CURRICULUM[selectedGrade]?.[selectedSubject] || [];
   }, [selectedGrade, selectedSubject]);
 
+  // Current Unit-specific homework package (contains 10-15 practice questions + 1 extension question)
+  const currentUnitPackage = useMemo((): UnitHomeworkPackage | undefined => {
+    return getUnitHomeworkPackage(selectedGrade, selectedSubject, selectedUnitNumber);
+  }, [selectedGrade, selectedSubject, selectedUnitNumber]);
+
+  // Practice questions (10 questions)
+  const practiceQuestions = useMemo((): HomeworkQuestionItem[] => {
+    return currentUnitPackage?.questions || [];
+  }, [currentUnitPackage]);
+
+  // Extension question (1 question)
+  const extensionQuestion = useMemo((): HomeworkQuestionItem | undefined => {
+    return currentUnitPackage?.extensionQuestion;
+  }, [currentUnitPackage]);
+
+  // All questions in this unit's package (10 practice + 1 extension = 11 total)
+  const allUnitQuestions = useMemo((): HomeworkQuestionItem[] => {
+    if (!currentUnitPackage) return [];
+    return [
+      ...currentUnitPackage.questions,
+      ...(currentUnitPackage.extensionQuestion ? [currentUnitPackage.extensionQuestion] : []),
+    ];
+  }, [currentUnitPackage]);
+
   // Current selected unit info
   const currentUnitInfo = useMemo(() => {
+    if (currentUnitPackage) {
+      return {
+        unitNumber: currentUnitPackage.unitNumber,
+        title: currentUnitPackage.unitTitle,
+        themeDesc: currentUnitPackage.themeDesc,
+      };
+    }
     return (
       availableUnits.find((u) => u.unitNumber === selectedUnitNumber) ||
       availableUnits[0] || {
@@ -171,24 +224,22 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
         themeDesc: '核心课程重难点',
       }
     );
+  }, [availableUnits, currentUnitPackage, selectedUnitNumber]);
+
+  // Strictly only target the selected unit (no cross-unit mixing)
+  const coveredUnits = useMemo(() => {
+    return availableUnits.filter((u) => u.unitNumber === selectedUnitNumber);
   }, [availableUnits, selectedUnitNumber]);
 
-  // Covered units list (e.g. if Unit 3 and cumulative=true -> [1, 2, 3])
-  const coveredUnits = useMemo(() => {
-    if (!includePreviousUnits || selectedUnitNumber <= 1) {
-      return availableUnits.filter((u) => u.unitNumber === selectedUnitNumber);
-    }
-    return availableUnits.filter((u) => u.unitNumber <= selectedUnitNumber);
-  }, [availableUnits, selectedUnitNumber, includePreviousUnits]);
-
-  // Reset drag states and tasks on grade, subject, unit, or cumulative toggle
+  // Reset drag states and tasks on grade, subject, unit, or exerciseIndex change
   useEffect(() => {
     setPlacedMatches({});
     setSelectedOptionForTap(null);
     setIsDragCompleted(false);
     setTaskAnswers({});
     setSubmittedTasks(false);
-  }, [selectedGrade, selectedSubject, selectedUnitNumber, includePreviousUnits, exerciseIndex]);
+    setSubmitScoreInfo(null);
+  }, [selectedGrade, selectedSubject, selectedUnitNumber, exerciseIndex]);
 
   // ==================== Dynamic Cumulative Drag Exercise Generation ====================
   const currentDragExercise = useMemo((): DragExercise | null => {
@@ -429,30 +480,26 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
     allWords,
   ]);
 
-  // ==================== Dynamic Cumulative Daily Tasks Generation ====================
-  const currentDailyTasks = useMemo((): DailyHomeworkTask[] => {
-    if (coveredUnits.length === 0) return [];
-
-    if (coveredUnits.length === 1) {
-      return coveredUnits[0].dailyTasks || [];
+  // ==================== Unit-Specific Homework Tasks (10 Practice + 1 Extension) ====================
+  const currentUnitTasks = useMemo((): HomeworkQuestionItem[] => {
+    if (allUnitQuestions.length > 0) {
+      return allUnitQuestions;
     }
-
-    // Combine tasks across covered units
-    const tasks: DailyHomeworkTask[] = [];
-    coveredUnits.forEach((u) => {
-      const isReview = u.unitNumber < selectedUnitNumber;
-      (u.dailyTasks || []).forEach((t) => {
-        tasks.push({
-          ...t,
-          unitNumber: u.unitNumber,
-          unitTag: isReview ? `第${u.unitNumber}单元复习` : `第${u.unitNumber}单元本课`,
-        });
-      });
-    });
-
-    // Limit to 4 questions max for kid's optimal attention span
-    return tasks.slice(0, 4);
-  }, [coveredUnits, selectedUnitNumber]);
+    // Fallback if ever needed
+    if (coveredUnits.length === 1 && coveredUnits[0].dailyTasks) {
+      return coveredUnits[0].dailyTasks.map((t) => ({
+        id: t.id,
+        type: 'single',
+        title: t.title,
+        stem: t.stem,
+        options: t.options,
+        correctIndex: t.correctIndex,
+        explanation: t.explanation,
+        unitTag: `第${selectedUnitNumber}单元`,
+      }));
+    }
+    return [];
+  }, [allUnitQuestions, coveredUnits, selectedUnitNumber]);
 
   // Handle Drag / Click to Place an Option into a Question's Slot
   const handlePlaceOptionIntoSlot = (questionId: string, optionIdOrLabel: string) => {
@@ -556,22 +603,21 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
             <div className="flex items-center gap-2 flex-wrap">
               <span className="bg-[#ffb800] text-[#6b4c00] text-xs font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
                 <Sparkles className="w-3.5 h-3.5" />
-                个性化智能滚动作业单
+                单元专项巩固作业
               </span>
               <span className="bg-emerald-500/90 text-white text-xs font-bold px-2.5 py-0.5 rounded-full shadow-2xs">
                 现阶段教材：上册
               </span>
               <span className="bg-white/20 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
-                温故而知新 · 滚动复习
+                10道精选题 + 1道素养拓展题
               </span>
             </div>
             <h2 className="text-xl md:text-2xl font-extrabold mt-1 tracking-wide">
-              {currentStudent.name} 的多学科综合课后作业
+              {currentStudent.name} 的多学科课后作业
             </h2>
             <p className="text-xs md:text-sm text-white/90 mt-0.5">
-              当前目标：{GRADE_LABELS[selectedGrade]} · 第 {selectedUnitNumber} 单元
-              <span className="ml-1 text-white/80 font-normal">（基于统编版/人教版各年级<strong>上册</strong>课本内容生成）</span>
-              {includePreviousUnits && selectedUnitNumber > 1 ? ` · 已融合第 1 ~ ${selectedUnitNumber} 单元综合考点` : ' · 本单元专项巩固'}
+              当前目标：{GRADE_LABELS[selectedGrade]} · {subjectThemes[selectedSubject].title} · 第 {selectedUnitNumber} 单元
+              <span className="ml-1 text-white/80 font-normal">（专练本单元：包含 10 道课时基础巩固题 + 1 道培优拓展提升题）</span>
             </p>
           </div>
 
@@ -679,7 +725,7 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
         </div>
       </div>
 
-      {/* 2. Unit Selector Bar with Cumulative Review Capability */}
+      {/* 2. Unit Selector Bar with Unit-Specific Practice Focus */}
       <div className="bg-white rounded-2xl p-3 border-2 border-[#dde9ff] cloud-shadow space-y-2.5">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
           {/* Unit selector buttons (Unit 1 to 6) */}
@@ -706,41 +752,18 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
             })}
           </div>
 
-          {/* Cumulative Review Toggle Button */}
-          <button
-            onClick={() => {
-              sound.playTap();
-              setIncludePreviousUnits((prev) => !prev);
-            }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
-              includePreviousUnits && selectedUnitNumber > 1
-                ? 'bg-[#e6f7fa] text-[#006780] border-[#006780] shadow-xs'
-                : 'bg-gray-100 text-gray-600 border-gray-300'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>
-              {includePreviousUnits && selectedUnitNumber > 1
-                ? `已包含 1~${selectedUnitNumber} 单元滚动作业`
-                : `仅练第 ${selectedUnitNumber} 单元`}
-            </span>
-          </button>
+          <div className="text-xs font-bold text-[#006780] bg-[#e6f7fa] px-3 py-1.5 rounded-xl border border-[#bae6fd] flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-[#0284c7]" />
+            <span>专项作业：仅出第 {selectedUnitNumber} 单元考点</span>
+          </div>
         </div>
 
-        {/* Cumulative Information Bar */}
+        {/* Unit Detail Bar */}
         <div className="bg-[#f0f9ff] border border-[#bae6fd] rounded-xl px-3 py-2 text-xs text-[#0369a1] flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-[#0284c7] shrink-0" />
             <span>
-              {includePreviousUnits && selectedUnitNumber > 1 ? (
-                <>
-                  <strong>滚动作业机制已开启：</strong>当前生成【第 {selectedUnitNumber} 单元】作业，已自动融合【第 1 ~ {selectedUnitNumber - 1} 单元】的已学考点进行滚动温故，新旧知识结合！
-                </>
-              ) : (
-                <>
-                  <strong>本单元专项强化：</strong>正在进行【第 {selectedUnitNumber} 单元：{currentUnitInfo.title}】的专项练习。
-                </>
-              )}
+              <strong>本单元专属精练：</strong>【第 {selectedUnitNumber} 单元：{currentUnitInfo.title}】，已出 10 道课时巩固练习题 + 1 道素养拔高拓展题，无其他单元交叉干扰。
             </span>
           </div>
 
@@ -798,23 +821,9 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
         </button>
       </div>
 
-      {/* Mode Tabs: 🧩 趣味拖拽作业 VS 📝 随堂闯关练一练 */}
+      {/* Mode Tabs: 📝 单元练习作业 (10-15题 + 1道拓展题) VS 🧩 趣味拖拽作业 */}
       <div className="flex items-center justify-between border-b border-[#dde9ff] pb-2">
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              sound.playTap();
-              setActiveTabSub('drag');
-            }}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs md:text-sm font-bold transition-all cursor-pointer ${
-              activeTabSub === 'drag'
-                ? 'bg-[#ffb800] text-[#6b4c00] shadow-sm'
-                : 'text-[#514532] hover:bg-[#eff4ff]'
-            }`}
-          >
-            <Move className="w-3.5 h-3.5" />
-            <span>🧩 趣味拖拽作业 (匹配归位)</span>
-          </button>
           <button
             onClick={() => {
               sound.playTap();
@@ -827,7 +836,21 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
             }`}
           >
             <Award className="w-3.5 h-3.5" />
-            <span>📝 课后巩固小测 (随堂闯关)</span>
+            <span>📝 单元专项作业 (10题练习 + 1道拓展题)</span>
+          </button>
+          <button
+            onClick={() => {
+              sound.playTap();
+              setActiveTabSub('drag');
+            }}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs md:text-sm font-bold transition-all cursor-pointer ${
+              activeTabSub === 'drag'
+                ? 'bg-[#ffb800] text-[#6b4c00] shadow-sm'
+                : 'text-[#514532] hover:bg-[#eff4ff]'
+            }`}
+          >
+            <Move className="w-3.5 h-3.5" />
+            <span>🧩 趣味连线/拖拽 (课标考点)</span>
           </button>
         </div>
 
@@ -1122,34 +1145,35 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
         </div>
       )}
 
-      {/* Sub-view B: 📝 随堂闯关课后小测 (含前置单元复习) */}
+      {/* Sub-view B: 📝 单元专项作业 (10-15道练习题 + 1道拓展题) */}
       {activeTabSub === 'daily' && (
-        <div className="bg-white rounded-3xl p-4 md:p-6 border-2 border-[#dde9ff] cloud-shadow space-y-4">
-          <div className="flex justify-between items-center border-b border-[#eff4ff] pb-3">
+        <div className="bg-white rounded-3xl p-4 md:p-6 border-2 border-[#dde9ff] cloud-shadow space-y-5">
+          {/* Unit Homework Header */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-[#eff4ff] pb-4">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="bg-[#ffdad6] text-[#ba1a1a] text-xs font-bold px-2 py-0.5 rounded-full">
-                  多学科联动 · 随堂小测
+                <span className="bg-[#e6f7fa] text-[#006780] text-xs font-black px-2.5 py-0.5 rounded-full border border-[#bae6fd]">
+                  {GRADE_LABELS[selectedGrade]} · {subjectThemes[selectedSubject].title}
                 </span>
-                {includePreviousUnits && selectedUnitNumber > 1 && (
-                  <span className="bg-[#e6f7fa] text-[#006780] text-xs font-bold px-2 py-0.5 rounded-full border border-[#bae6fd]">
-                    覆盖 1~{selectedUnitNumber} 单元滚动考点
-                  </span>
-                )}
-                <h3 className="text-base md:text-lg font-bold text-[#0d1c2f]">
-                  {GRADE_LABELS[selectedGrade]}
-                  {subjectThemes[selectedSubject].title}课后巩固小测
-                </h3>
+                <span className="bg-[#006780] text-white text-xs font-bold px-2.5 py-0.5 rounded-full">
+                  第 {selectedUnitNumber} 单元专练
+                </span>
+                <span className="bg-[#fff8e6] text-[#7c5800] text-xs font-bold px-2 py-0.5 rounded-full border border-[#ffd666]">
+                  共 {currentUnitTasks.length} 题（10题基础 + 1题拔高）
+                </span>
               </div>
+              <h3 className="text-base md:text-lg font-extrabold text-[#0d1c2f] mt-1">
+                【{currentUnitInfo.title}】单元核心考点精练
+              </h3>
               <p className="text-xs text-[#514532]/80 mt-0.5">
-                认真读题并选出正确答案，提交后可查看详细名师解析并获取奖励星星！
+                严格锁定本单元教学目标出题，无其他单元交叉。包含 10 道基础练习题和 1 道单元素养拓展题。
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 text-xs text-[#7c5800] bg-[#fff8e6] px-2.5 py-1 rounded-xl border border-[#ffd666] font-bold">
-                <Trophy className="w-3.5 h-3.5" />
-                <span>全对可领 +2 ⭐</span>
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 text-xs text-[#7c5800] bg-[#fff8e6] px-2.5 py-1.5 rounded-xl border border-[#ffd666] font-bold">
+                <Trophy className="w-3.5 h-3.5 text-[#ffb800]" />
+                <span>全对可领 +5 ⭐</span>
               </div>
               <button
                 onClick={() => {
@@ -1163,77 +1187,188 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
                   });
                   setTaskAnswers({});
                   setSubmittedTasks(false);
-                  setExerciseIndex((prev) => prev + 1);
+                  setSubmitScoreInfo(null);
                 }}
-                className="text-xs bg-[#eff4ff] hover:bg-[#dde9ff] text-[#006780] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer"
-                title="换一套小测考题"
+                className="text-xs bg-[#eff4ff] hover:bg-[#dde9ff] active:scale-95 text-[#006780] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1 cursor-pointer transition-all border border-[#bae6fd]"
+                title="重置当前单元作业做题状态"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>换一批</span>
+                <span>清空重做</span>
               </button>
             </div>
           </div>
 
+          {/* Quick Jump Question Navigation Bar */}
+          <div className="bg-[#f8fafc] p-2.5 rounded-2xl border border-[#e2e8f0] flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs font-bold text-[#64748b] px-1">答题导航:</span>
+              {currentUnitTasks.map((t, idx) => {
+                const isAnswered = taskAnswers[t.id] !== undefined;
+                const isCorrect = submittedTasks && taskAnswers[t.id] === t.correctIndex;
+                const isWrong = submittedTasks && isAnswered && taskAnswers[t.id] !== t.correctIndex;
+                const isExtension = t.type === 'extension' || idx >= 10;
+
+                let btnStyle = 'bg-white text-[#475569] border-[#cbd5e1] hover:border-[#0284c7]';
+                if (submittedTasks) {
+                  if (isCorrect) {
+                    btnStyle = 'bg-[#dcfce7] text-[#15803d] border-[#86efac] font-bold';
+                  } else if (isWrong) {
+                    btnStyle = 'bg-[#ffe4e6] text-[#be123c] border-[#fda4af] font-bold';
+                  }
+                } else if (isAnswered) {
+                  btnStyle = 'bg-[#006780] text-white border-[#006780] font-bold';
+                }
+
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => {
+                      const el = document.getElementById(`homework-q-${t.id}`);
+                      if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }
+                    }}
+                    className={`w-7 h-7 rounded-lg border text-xs font-bold flex items-center justify-center transition-all cursor-pointer ${btnStyle} ${
+                      isExtension ? 'ring-2 ring-[#f59e0b]/40' : ''
+                    }`}
+                    title={isExtension ? '第11题：拔高拓展题' : `第${idx + 1}题`}
+                  >
+                    {isExtension ? '★' : idx + 1}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="text-xs font-bold text-[#006780]">
+              进度：{Object.keys(taskAnswers).length} / {currentUnitTasks.length} 题
+            </div>
+          </div>
+
+          {/* Submitted Score Summary Card */}
+          {submittedTasks && submitScoreInfo && (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-[#eff6ff] via-[#f0fdf4] to-[#fefce8] border-2 border-[#86efac] flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-fade-in">
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-[#22c55e] text-white flex flex-col items-center justify-center shadow-xs">
+                  <span className="text-xs font-medium">得分</span>
+                  <span className="text-lg font-black leading-none">{submitScoreInfo.scorePercent}</span>
+                </div>
+                <div>
+                  <h4 className="text-base font-extrabold text-[#0f172a] flex items-center gap-2">
+                    <span>作业批改完成！</span>
+                    {submitScoreInfo.scorePercent === 100 && (
+                      <span className="text-xs bg-[#ffb800] text-[#78350f] px-2 py-0.5 rounded-full font-black">
+                        满分通关 🏆
+                      </span>
+                    )}
+                  </h4>
+                  <p className="text-xs text-[#334155] mt-0.5">
+                    共 {submitScoreInfo.totalCount} 道题，正确{' '}
+                    <strong className="text-[#16a34a]">{submitScoreInfo.correctCount}</strong> 道，错误{' '}
+                    <strong className="text-[#dc2626]">{submitScoreInfo.wrongCount}</strong> 道。已记录学情并奖励星星！
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    sound.playTap();
+                    setTaskAnswers({});
+                    setSubmittedTasks(false);
+                    setSubmitScoreInfo(null);
+                  }}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-[#f8fafc] text-[#0f172a] border border-[#cbd5e1] shadow-2xs transition-all cursor-pointer"
+                >
+                  重做本单元
+                </button>
+                {selectedUnitNumber < 6 && (
+                  <button
+                    onClick={() => {
+                      handleRequestUnit(selectedUnitNumber + 1);
+                    }}
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold bg-[#006780] hover:bg-[#005266] text-white shadow-xs transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    <span>下一单元作业</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Question List */}
           <div className="space-y-4">
-            {currentDailyTasks.map((task, qIndex) => {
+            {/* Section 1: Practice Questions (10 questions) */}
+            <div className="flex items-center gap-2 pt-2 border-t border-[#f1f5f9]">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#006780]" />
+              <h4 className="text-sm font-extrabold text-[#0f172a]">
+                第一部分：单元基础巩固练习（共 10 题）
+              </h4>
+              <span className="text-xs text-[#64748b] font-normal">本单元重难点针对性夯实</span>
+            </div>
+
+            {practiceQuestions.map((task, qIndex) => {
               const selectedOption = taskAnswers[task.id];
               const isAnswered = selectedOption !== undefined;
               const isCorrect = isAnswered && selectedOption === task.correctIndex;
 
               return (
                 <div
+                  id={`homework-q-${task.id}`}
                   key={task.id}
-                  className="p-3.5 md:p-4 rounded-2xl bg-[#fafbff] border border-[#dde9ff] space-y-2.5"
+                  className="p-3.5 md:p-4 rounded-2xl bg-[#fafbff] border border-[#dde9ff] space-y-3 transition-all hover:border-[#bae6fd]"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2">
-                      <span className="w-6 h-6 rounded-lg bg-[#006780] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="flex items-start gap-2.5">
+                      <span className="w-6 h-6 rounded-lg bg-[#006780] text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
                         {qIndex + 1}
                       </span>
-                      <div>
-                        {task.unitTag && (
-                          <span className="text-xs font-bold text-[#006780] bg-[#e6f7fa] px-2 py-0.5 rounded border border-[#bae6fd] mr-1.5">
-                            {task.unitTag}
-                          </span>
-                        )}
-                        <span className="text-xs font-bold text-[#7c5800] bg-[#fff8e6] px-2 py-0.5 rounded border border-[#ffd666] mr-1.5">
-                          {task.title}
-                        </span>
-                        <span className="text-sm md:text-base font-bold text-[#0d1c2f]">
-                          {task.stem}
-                        </span>
-                      </div>
+                      <span className="text-sm md:text-base font-bold text-[#0d1c2f] leading-relaxed pt-0.5">
+                        {task.stem}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Options (一行放2个) */}
-                  <div className="grid grid-cols-2 gap-2 pt-1">
+                  {/* Options (一行放2个选项) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                     {task.options.map((opt, optIdx) => {
                       const isChosen = selectedOption === optIdx;
-                      let optStyle = 'bg-white border-[#dde9ff] hover:border-[#0284c7]';
+                      const optLabel = String.fromCharCode(65 + optIdx); // A, B, C, D
+                      let optStyle = 'bg-white border-[#dde9ff] hover:border-[#0284c7] text-[#1e293b]';
 
                       if (submittedTasks && isAnswered) {
                         if (optIdx === task.correctIndex) {
-                          optStyle = 'bg-[#f3fee6] border-[#6fde00] text-[#2b5d00] font-bold';
+                          optStyle = 'bg-[#f0fdf4] border-[#22c55e] text-[#15803d] font-bold';
                         } else if (isChosen && !isCorrect) {
-                          optStyle = 'bg-[#ffdad6] border-[#ba1a1a] text-[#ba1a1a]';
+                          optStyle = 'bg-[#fef2f2] border-[#ef4444] text-[#b91c1c]';
                         }
                       } else if (isChosen) {
-                        optStyle = 'bg-[#eff4ff] border-[#0284c7] text-[#0284c7] font-bold';
+                        optStyle = 'bg-[#e0f2fe] border-[#0284c7] text-[#0369a1] font-bold shadow-2xs';
                       }
 
                       return (
                         <button
                           key={optIdx}
+                          disabled={submittedTasks}
                           onClick={() => {
                             sound.playTap();
                             setTaskAnswers((prev) => ({ ...prev, [task.id]: optIdx }));
                           }}
-                          className={`p-2.5 rounded-xl border-2 text-xs md:text-sm text-left transition-all cursor-pointer flex items-center justify-between ${optStyle}`}
+                          className={`p-3 rounded-xl border-2 text-xs md:text-sm text-left transition-all cursor-pointer flex items-center justify-between ${optStyle} ${
+                            submittedTasks ? 'cursor-default' : ''
+                          }`}
                         >
-                          <span>{opt}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-md bg-black/5 flex items-center justify-center text-xs font-bold text-slate-600 shrink-0">
+                              {optLabel}
+                            </span>
+                            <span>{opt}</span>
+                          </div>
                           {submittedTasks && optIdx === task.correctIndex && (
-                            <CheckCircle2 className="w-4 h-4 text-[#2b5d00]" />
+                            <CheckCircle2 className="w-4 h-4 text-[#16a34a] shrink-0 ml-1" />
+                          )}
+                          {submittedTasks && isChosen && !isCorrect && (
+                            <AlertCircle className="w-4 h-4 text-[#dc2626] shrink-0 ml-1" />
                           )}
                         </button>
                       );
@@ -1243,42 +1378,162 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
                   {/* Explanation after submission */}
                   {submittedTasks && isAnswered && (
                     <div
-                      className={`p-2.5 rounded-xl text-xs ${
+                      className={`p-3 rounded-xl text-xs space-y-1 ${
                         isCorrect
-                          ? 'bg-[#f3fee6] text-[#2b5d00] border border-[#6fde00]'
-                          : 'bg-[#fff8e6] text-[#7c5800] border border-[#ffd666]'
+                          ? 'bg-[#f0fdf4] text-[#166534] border border-[#bbf7d0]'
+                          : 'bg-[#fffbeb] text-[#92400e] border border-[#fde68a]'
                       }`}
                     >
-                      <span className="font-bold mr-1">
-                        {isCorrect ? '✅ 回答正确！' : '❌ 解析：'}
-                      </span>
-                      <span>{task.explanation}</span>
+                      <div className="font-bold flex items-center gap-1.5">
+                        {isCorrect ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 text-[#16a34a]" />
+                            <span>回答正确！</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertCircle className="w-4 h-4 text-[#d97706]" />
+                            <span>错题解析：正确答案是【{String.fromCharCode(65 + task.correctIndex)}】</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="leading-relaxed pl-5.5 text-slate-700">
+                        {task.explanation}
+                      </div>
                     </div>
                   )}
                 </div>
               );
             })}
+
+            {/* Section 2: Extension Question (1 question) */}
+            {extensionQuestion && (
+              <div className="pt-3">
+                <div className="flex items-center gap-2 pb-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#f59e0b]" />
+                  <h4 className="text-sm font-extrabold text-[#92400e]">
+                    第二部分：单元素养拔高拓展题（共 1 题）
+                  </h4>
+                  <span className="text-xs bg-[#fef3c7] text-[#b45309] font-bold px-2 py-0.5 rounded border border-[#fde68a]">
+                    思维提升 · 课标核心素养
+                  </span>
+                </div>
+
+                <div
+                  id={`homework-q-${extensionQuestion.id}`}
+                  className="p-4 rounded-2xl bg-gradient-to-br from-[#fffbeb] to-[#fefce8] border-2 border-[#f59e0b]/60 space-y-3 shadow-xs"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5">
+                      <span className="w-7 h-7 rounded-lg bg-[#f59e0b] text-white text-xs font-black flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                        ★
+                      </span>
+                      <span className="text-sm md:text-base font-extrabold text-[#451a03] leading-relaxed pt-0.5">
+                        {extensionQuestion.stem}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Options */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    {extensionQuestion.options.map((opt, optIdx) => {
+                      const isChosen = taskAnswers[extensionQuestion.id] === optIdx;
+                      const isAnswered = taskAnswers[extensionQuestion.id] !== undefined;
+                      const isCorrect = isAnswered && isChosen && optIdx === extensionQuestion.correctIndex;
+                      const optLabel = String.fromCharCode(65 + optIdx);
+                      let optStyle = 'bg-white border-[#fde68a] hover:border-[#f59e0b] text-[#451a03]';
+
+                      if (submittedTasks && isAnswered) {
+                        if (optIdx === extensionQuestion.correctIndex) {
+                          optStyle = 'bg-[#f0fdf4] border-[#22c55e] text-[#15803d] font-bold';
+                        } else if (isChosen && !isCorrect) {
+                          optStyle = 'bg-[#fef2f2] border-[#ef4444] text-[#b91c1c]';
+                        }
+                      } else if (isChosen) {
+                        optStyle = 'bg-[#fef3c7] border-[#d97706] text-[#78350f] font-bold shadow-2xs';
+                      }
+
+                      return (
+                        <button
+                          key={optIdx}
+                          disabled={submittedTasks}
+                          onClick={() => {
+                            sound.playTap();
+                            setTaskAnswers((prev) => ({ ...prev, [extensionQuestion.id]: optIdx }));
+                          }}
+                          className={`p-3 rounded-xl border-2 text-xs md:text-sm text-left transition-all cursor-pointer flex items-center justify-between ${optStyle} ${
+                            submittedTasks ? 'cursor-default' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-md bg-amber-100 flex items-center justify-center text-xs font-bold text-amber-800 shrink-0">
+                              {optLabel}
+                            </span>
+                            <span>{opt}</span>
+                          </div>
+                          {submittedTasks && optIdx === extensionQuestion.correctIndex && (
+                            <CheckCircle2 className="w-4 h-4 text-[#16a34a] shrink-0 ml-1" />
+                          )}
+                          {submittedTasks && isChosen && !isCorrect && (
+                            <AlertCircle className="w-4 h-4 text-[#dc2626] shrink-0 ml-1" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Explanation after submission */}
+                  {submittedTasks && taskAnswers[extensionQuestion.id] !== undefined && (
+                    <div
+                      className={`p-3 rounded-xl text-xs space-y-1 ${
+                        taskAnswers[extensionQuestion.id] === extensionQuestion.correctIndex
+                          ? 'bg-[#f0fdf4] text-[#166534] border border-[#bbf7d0]'
+                          : 'bg-[#fffbeb] text-[#92400e] border border-[#fde68a]'
+                      }`}
+                    >
+                      <div className="font-bold flex items-center gap-1.5">
+                        {taskAnswers[extensionQuestion.id] === extensionQuestion.correctIndex ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 text-[#16a34a]" />
+                            <span>恭喜答对拔高拓展题！思维能力极强 🌟</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertCircle className="w-4 h-4 text-[#d97706]" />
+                            <span>拓展题名师解析：正确答案是【{String.fromCharCode(65 + extensionQuestion.correctIndex)}】</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="leading-relaxed pl-5.5 text-slate-700">
+                        {extensionQuestion.explanation}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Bottom Submit Action */}
-          <div className="flex justify-between items-center pt-2">
-            <span className="text-xs text-[#514532]">
-              已完成: {Object.keys(taskAnswers).length} / {currentDailyTasks.length} 题
+          <div className="flex justify-between items-center pt-3 border-t border-[#eff4ff]">
+            <span className="text-xs font-semibold text-[#514532]">
+              已答：{Object.keys(taskAnswers).length} / {currentUnitTasks.length} 题
             </span>
 
             {!submittedTasks ? (
               <button
                 onClick={() => {
-                  if (Object.keys(taskAnswers).length < currentDailyTasks.length) {
+                  const answeredCount = Object.keys(taskAnswers).length;
+                  if (answeredCount < currentUnitTasks.length) {
                     sound.playWrong();
-                    alert('请先完成所有题目再提交哦！');
+                    alert(`还有 ${currentUnitTasks.length - answeredCount} 道题未作答，请全部完成后再提交批改哦！`);
                     return;
                   }
 
-                  // Count correct and wrong answers to record stats per unit
+                  // Count correct and wrong answers
                   let wrongCountThisSubmit = 0;
                   let correctCountThisSubmit = 0;
-                  currentDailyTasks.forEach((task) => {
+                  currentUnitTasks.forEach((task) => {
                     const chosen = taskAnswers[task.id];
                     if (chosen !== undefined) {
                       if (chosen === task.correctIndex) {
@@ -1311,14 +1566,25 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
                     });
                   }
 
-                  sound.playCorrect();
+                  const scorePercent = Math.round((correctCountThisSubmit / currentUnitTasks.length) * 100);
+                  setSubmitScoreInfo({
+                    correctCount: correctCountThisSubmit,
+                    wrongCount: wrongCountThisSubmit,
+                    totalCount: currentUnitTasks.length,
+                    scorePercent,
+                  });
+
+                  sound.playVictory();
                   setSubmittedTasks(true);
                   triggerConfetti();
-                  onAddStars(2);
+
+                  const starReward = scorePercent >= 90 ? 5 : scorePercent >= 60 ? 3 : 2;
+                  onAddStars(starReward);
                 }}
-                className="bg-[#006780] hover:bg-[#005266] active:scale-95 text-white text-xs md:text-sm font-bold px-4 py-2 rounded-xl transition-all shadow-sm cursor-pointer"
+                className="bg-[#006780] hover:bg-[#005266] active:scale-95 text-white text-xs md:text-sm font-bold px-5 py-2.5 rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1.5"
               >
-                提交作业批改
+                <CheckCircle2 className="w-4 h-4" />
+                <span>提交本单元作业批改</span>
               </button>
             ) : (
               <button
@@ -1333,11 +1599,12 @@ export const HomeworkScreen: React.FC<HomeworkScreenProps> = ({
                   });
                   setTaskAnswers({});
                   setSubmittedTasks(false);
-                  setExerciseIndex((prev) => prev + 1);
+                  setSubmitScoreInfo(null);
                 }}
-                className="bg-[#ffb800] hover:bg-[#ffa000] active:scale-95 text-[#6b4c00] text-xs md:text-sm font-bold px-4 py-2 rounded-xl transition-all shadow-sm cursor-pointer"
+                className="bg-[#ffb800] hover:bg-[#ffa000] active:scale-95 text-[#6b4c00] text-xs md:text-sm font-bold px-5 py-2.5 rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-1.5"
               >
-                再练一套新题
+                <RefreshCw className="w-4 h-4" />
+                <span>再做一次本单元练习</span>
               </button>
             )}
           </div>

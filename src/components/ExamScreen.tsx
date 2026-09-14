@@ -386,9 +386,9 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
     }
   };
 
-  // Retake authorization with password '2026'
+  // Retake authorization with password '20162018'
   const handleRetakeConfirm = () => {
-    if (retakePasswordInput.trim() === '2026') {
+    if (retakePasswordInput.trim() === '20162018') {
       sound.playTap();
       clearExamSubmission(currentStudent.id, selectedGrade, selectedSubject);
       setSubmissionRecord(null);
@@ -404,7 +404,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
       setTimeout(() => setRetakeSuccessToast(''), 3500);
     } else {
       sound.playWrong();
-      setRetakePasswordError('密码错误！请输入重考授权密码：2026');
+      setRetakePasswordError('密码错误！请输入正确的重考授权密码');
     }
   };
 
@@ -1618,7 +1618,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
         </div>
       )}
 
-      {/* 11. RETAKE PASSWORD MODAL (Password: 2026) */}
+      {/* 11. RETAKE PASSWORD MODAL */}
       {showRetakeModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 border-2 border-[#dde9ff] cloud-shadow text-center space-y-4 animate-in fade-in zoom-in duration-200">
@@ -1631,8 +1631,7 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                 教师 / 家长重考授权
               </h3>
               <p className="text-xs text-[#514532]/80 mt-1">
-                当前学科已完成考试。为了保证测试严肃性，重新考试需输入授权密码（默认密码：
-                <strong className="text-[#ff4757]">2026</strong>）
+                当前学科已完成考试。为了保证测试严肃性，重新考试需输入教师或家长授权密码。
               </p>
             </div>
 
@@ -1642,10 +1641,10 @@ export const ExamScreen: React.FC<ExamScreenProps> = ({
                 请输入授权密码：
               </label>
               <input
-                type="text"
+                type="password"
                 autoFocus
                 value={retakePasswordInput}
-                placeholder="请输入密码 2026"
+                placeholder="请输入授权密码"
                 onChange={(e) => {
                   setRetakePasswordInput(e.target.value);
                   setRetakePasswordError('');
